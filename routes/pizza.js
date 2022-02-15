@@ -4,6 +4,12 @@ import { client } from "../index.js";
 import { Getuser } from "../helperfunctions.js";
 import { ObjectId } from "mongodb";
 const router = express.Router();
+import Razorpay from "razorpay";
+import shortid from "shortid";
+const razorpay = new Razorpay({
+  key_id: "rzp_test_wt6S48PF3wQ702",
+  key_secret: "JO8zCupfZZMyhnTdo8ErPF9Z",
+});
 
 router.route("/").get(async (req, res) => {
   const result = await client
@@ -53,12 +59,39 @@ router.route("/product/:id").delete(async (req, res) => {
   res.send(cart);
 });
 router.route("/payment").post(async (req, res) => {
-  const data = req.body;
-  const payment = await client
-    .db("pizzadelivery")
-    .collection("orders")
-    .insertOne(data);
-  res.send(payment);
+  var options = {
+    amount: req.body.amountPaid * 100,
+    currency: "INR",
+    receipt: shortid.generate(),
+  };
+  try {
+    const response = await razorpay.orders.create(options);
+    console.log(response);
+
+    if (response) {
+      // req.body.transactionId = response.razorpay_payment_id;
+      const data = req.body;
+      const payment = await client
+        .db("pizzadelivery")
+        .collection("orders")
+        .insertOne(data);
+      // res.send(payment);
+      const orders = await client
+        .db("pizzadelivery")
+        .collection("cart")
+        .deleteMany();
+      res.send({
+        id: response.id,
+        currency: response.currency,
+        amount: response.amount,
+      });
+    } else {
+      return res.status(400).json(error);
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(400).json(error);
+  }
 });
 router.route("/orderhistory").get(async (req, res) => {
   const id = req.header("x-auth-token");
